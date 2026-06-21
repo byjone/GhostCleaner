@@ -1,0 +1,34 @@
+{
+  "_description": "Perfil conservador. Solo ajustes que no afectan al funcionamiento normal del sistema. Recomendado para usuarios que quieren algo de privacidad sin riesgo.",
+
+  "privacy": {
+    "enabled": true,
+    "disableTelemetry": true,
+    "disableAdvertisingId": true
+  },
+
+  "services": {
+    "enabled": false
+  },
+
+  "tasks": {
+    "enabled": false
+  },
+
+  "hosts": {
+    "enabled": false
+  },
+
+  "optimizer": {
+    "enabled": true,
+    "cleanUserTemp": true,
+    "cleanSystemTemp": false,
+    "flushDns": true
+  },
+
+  "security": {
+    "enabled": true,
+    "enableFirewall": true,
+    "enableDefender": true
+  }
+}
