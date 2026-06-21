@@ -1,0 +1,50 @@
+{
+  "_description": "Perfil equilibrado. Desactiva telemetria activa y servicios comunes de recopilacion de datos. Recomendado para la mayoria de usuarios.",
+
+  "privacy": {
+    "enabled": true,
+    "disableTelemetry": true,
+    "disableAdvertisingId": true
+  },
+
+  "services": {
+    "enabled": true,
+    "list": [
+      "DiagTrack",
+      "dmwappushservice"
+    ]
+  },
+
+  "tasks": {
+    "enabled": true,
+    "list": [
+      { "Path": "\\Microsoft\\Windows\\Application Experience",                  "Name": "Microsoft Compatibility Appraiser" },
+      { "Path": "\\Microsoft\\Windows\\Application Experience",                  "Name": "ProgramDataUpdater" },
+      { "Path": "\\Microsoft\\Windows\\Customer Experience Improvement Program", "Name": "Consolidator" },
+      { "Path": "\\Microsoft\\Windows\\Customer Experience Improvement Program", "Name": "UsbCeip" }
+    ]
+  },
+
+  "hosts": {
+    "enabled": true,
+    "domains": [
+      "telemetry.microsoft.com",
+      "watson.telemetry.microsoft.com",
+      "vortex.data.microsoft.com",
+      "settings-win.data.microsoft.com"
+    ]
+  },
+
+  "optimizer": {
+    "enabled": true,
+    "cleanUserTemp": true,
+    "cleanSystemTemp": true,
+    "flushDns": true
+  },
+
+  "security": {
+    "enabled": true,
+    "enableFirewall": true,
+    "enableDefender": true
+  }
+}
