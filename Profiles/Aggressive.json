@@ -1,0 +1,59 @@
+{
+  "_description": "Perfil agresivo. Maximiza privacidad y rendimiento. Puede afectar a algunas funciones del sistema (actualizaciones, diagnosticos, Superfetch). Recomendado para usuarios avanzados.",
+
+  "privacy": {
+    "enabled": true,
+    "disableTelemetry": true,
+    "disableAdvertisingId": true
+  },
+
+  "services": {
+    "enabled": true,
+    "list": [
+      "DiagTrack",
+      "dmwappushservice",
+      "SysMain"
+    ]
+  },
+
+  "tasks": {
+    "enabled": true,
+    "list": [
+      { "Path": "\\Microsoft\\Windows\\Application Experience",                  "Name": "Microsoft Compatibility Appraiser" },
+      { "Path": "\\Microsoft\\Windows\\Application Experience",                  "Name": "ProgramDataUpdater" },
+      { "Path": "\\Microsoft\\Windows\\Customer Experience Improvement Program", "Name": "Consolidator" },
+      { "Path": "\\Microsoft\\Windows\\Customer Experience Improvement Program", "Name": "UsbCeip" },
+      { "Path": "\\Microsoft\\Windows\\Customer Experience Improvement Program", "Name": "KernelCeipTask" },
+      { "Path": "\\Microsoft\\Windows\\Autochk",                                 "Name": "Proxy" },
+      { "Path": "\\Microsoft\\Windows\\DiskDiagnostic",                          "Name": "Microsoft-Windows-DiskDiagnosticDataCollector" }
+    ]
+  },
+
+  "hosts": {
+    "enabled": true,
+    "domains": [
+      "telemetry.microsoft.com",
+      "watson.telemetry.microsoft.com",
+      "vortex.data.microsoft.com",
+      "settings-win.data.microsoft.com",
+      "telecommand.telemetry.microsoft.com",
+      "oca.telemetry.microsoft.com",
+      "sqm.telemetry.microsoft.com",
+      "watson.microsoft.com",
+      "statsfe2.update.microsoft.com.akadns.net"
+    ]
+  },
+
+  "optimizer": {
+    "enabled": true,
+    "cleanUserTemp": true,
+    "cleanSystemTemp": true,
+    "flushDns": true
+  },
+
+  "security": {
+    "enabled": true,
+    "enableFirewall": true,
+    "enableDefender": true
+  }
+}
