@@ -17,15 +17,22 @@
 # ESTRUCTURA DEL PROYECTO:
 #   GhostCleaner.ps1        <- este archivo (lanzador)
 #   Modules\
-#     Core.psm1             <- funciones comunes: menu, logging, helpers
+#     Core.psm1             <- funciones comunes: menu, logging, helpers, plugins
+#     Compat.psm1           <- comprobacion de version de Windows/PowerShell
 #     Privacy.psm1          <- telemetria y publicidad
 #     Services.psm1         <- servicios de Windows
 #     Tasks.psm1            <- tareas programadas
 #     Hosts.psm1            <- bloqueo de dominios via archivo hosts
 #     Optimizer.psm1        <- limpieza de temporales y DNS
 #     Security.psm1         <- Firewall y Defender
+#     Apps.psm1             <- desinstala apps preinstaladas (Appx)
+#     Browsers.psm1         <- privacidad de Edge/Chrome (opcional)
 #     Restore.psm1          <- deshacer cambios aplicados
-#   Backup\                 <- carpeta donde se guardan copias de seguridad
+#     Audit.psm1            <- diagnostico de solo lectura
+#     Update.psm1           <- aviso de version nueva en GitHub Releases
+#   Plugins\                <- opcional. Modulos propios (ver README)
+#   Backup\                 <- se crea sola. Estado del sistema antes de cada cambio
+#   Logs\                   <- se crea sola. Logs de sesion e informes HTML
 #   Profiles\               <- perfiles de configuracion (Safe/Balanced/Aggressive)
 #
 # POR QUE SE NECESITA SER ADMINISTRADOR:
@@ -114,14 +121,18 @@ $script:GhostCleanerRoot = $PSScriptRoot
 
 $modules = @(
     'Core',       # Primero: contiene Write-GC y otros helpers que usan los demas
+    'Compat',     # Comprobacion de compatibilidad: debe ir pronto, antes de actuar
     'Privacy',
     'Services',
     'Tasks',
     'Hosts',
     'Optimizer',
     'Security',
+    'Apps',
+    'Browsers',   # Privacidad de Edge/Chrome (opcional, desactivado por defecto)
     'Restore',
-    'Audit'       # Diagnostico de solo lectura: no aplica cambios
+    'Audit',      # Diagnostico de solo lectura: no aplica cambios
+    'Update'      # Comprobacion de version contra GitHub Releases
 )
 
 foreach ($mod in $modules) {
@@ -164,6 +175,15 @@ try {
     Write-Host ('[GhostCleaner] Error inicializando: ' + $_.Exception.Message) -ForegroundColor Red
     throw   # 're-throw': vuelve a lanzar el error para que se vea el detalle completo
 }
+
+# Comprobacion de compatibilidad y de version: ninguna de las dos detiene la
+# ejecucion si algo falla (sin conexion, cmdlet no disponible...), solo avisan.
+Test-GCCompatibility
+[void](Test-GCUpdateAvailable)
+
+# Carga cualquier plugin que haya en Plugins\ (puede no existir la carpeta,
+# en cuyo caso Import-GCPlugins simplemente no hace nada).
+[void](Import-GCPlugins)
 
 # ==============================================================================
 # MENU PRINCIPAL  -  o  EJECUCION DIRECTA POR PERFIL
