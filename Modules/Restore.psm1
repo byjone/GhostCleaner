@@ -12,13 +12,19 @@
 #   [SI] Servicios : DiagTrack y dmwappushservice vuelven a inicio "Manual"
 #                    (no "Automatico"; para eso usa el panel de Servicios)
 #   [SI] Hosts     : se eliminan todas las lineas "0.0.0.0 ..." del archivo hosts
+#   [SI] Firewall  : se quitan las reglas "GhostCleaner-*" (bloqueo de
+#                    telemetria por IP creado en Security.psm1)
+#   [SI] Browsers  : se quitan las politicas de privacidad de Edge/Chrome
+#                    aplicadas por Browsers.psm1 (Undo-GCBrowserPolicies)
 #
 # QUE NO SE RESTAURA (debes hacerlo manualmente si lo necesitas):
 #   [NO] Registro  : AllowTelemetry y AdvertisingID
 #                    -> abre regedit.exe y navega a las rutas de Privacy.psm1
 #   [NO] Tareas    : las tareas deshabilitadas en Tasks.psm1
 #                    -> abre "Programador de tareas" y reactivalas una a una
-#   [NO] Defender/Firewall : estos se reactivan con la opcion [5] Security
+#   [NO] Apps      : las apps desinstaladas en Apps.psm1 no se reinstalan solas
+#                    -> usa Microsoft Store para volver a instalarlas
+#   [NO] Defender/Firewall (activacion) : estos se reactivan con la opcion [5] Security
 #
 # ==============================================================================
 
@@ -99,6 +105,32 @@ function Invoke-Restore {
     } catch {
         Write-GC -Message ('Fallo al restaurar hosts: ' + $_.Exception.Message) -Level 'Error'
         throw
+    }
+
+    # ── Quitar reglas de Firewall creadas por Block-GCTelemetryFirewall ───────
+    Write-GC -Message 'Eliminando reglas de Firewall de telemetria (si existen)...' -Level 'Action'
+
+    try {
+        $reglas = Get-NetFirewallRule -DisplayName 'GhostCleaner-*' -ErrorAction SilentlyContinue
+        if ($reglas) {
+            $reglas | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+            Write-GC -Message ('Reglas de Firewall eliminadas: ' + $reglas.Count) -Level 'Info'
+        } else {
+            Write-GC -Message 'No habia reglas de Firewall de GhostCleaner que quitar.' -Level 'Info'
+        }
+    } catch {
+        Write-GC -Message ('No se pudieron consultar/quitar reglas de Firewall: ' + $_.Exception.Message) -Level 'Warning'
+        # No relanzamos: esto es un extra de limpieza, no algo critico para el Restore.
+    }
+
+    # ── Revertir politicas de privacidad de Edge/Chrome ───────────────────────
+    # Undo-GCBrowserPolicies vive en Browsers.psm1, cargado junto al resto de
+    # modulos con -Global, asi que esta disponible aqui sin tener que importarlo
+    # de nuevo. Si el modulo Browsers nunca llego a aplicar nada (el usuario no
+    # lo activo en su perfil), esta funcion simplemente no encuentra valores que
+    # quitar y lo dice por consola, sin marcarlo como error.
+    if (Get-Command 'Undo-GCBrowserPolicies' -ErrorAction SilentlyContinue) {
+        Undo-GCBrowserPolicies
     }
 
     Write-GC -Message 'Restore completado (parcial).' -Level 'Info'
