@@ -4,6 +4,8 @@ Script de PowerShell para reducir la telemetría y la publicidad de Windows, y d
 
 Nació de hacer lo mismo en cada PC nuevo que configuraba: desactivar DiagTrack, quitar el Advertising ID, deshabilitar un puñado de tareas programadas de "Customer Experience Improvement Program"... Al final lo junté todo en un script con perfiles, para no tener que recordar la lista cada vez.
 
+Versión actual: **1.3.1**. Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo.
+
 ## Qué hace y qué no hace
 
 GhostCleaner toca registro, servicios, tareas programadas, el archivo hosts, reglas de Firewall de salida, apps preinstaladas (Appx) y un par de ajustes de seguridad. No es un "optimizador milagroso" ni promete duplicar el rendimiento: lo que hace es desactivar procesos de recogida de datos y dejar el Firewall/Defender en un estado conocido. La parte de limpieza de temporales es la típica, nada del otro mundo.
@@ -25,14 +27,14 @@ Modules\
   Security.psm1         <- Firewall, Defender y bloqueo de telemetria por IP
   Apps.psm1             <- desinstala apps preinstaladas (Appx/UWP)
   Browsers.psm1         <- privacidad de Edge/Chrome (opcional, via Registro)
-  Restore.psm1          <- deshace servicios, hosts y reglas de Firewall (parcial)
+  Restore.psm1          <- deshace servicios, hosts, Firewall y politicas de navegador
   Audit.psm1            <- solo lee el estado actual, no cambia nada
   Update.psm1           <- avisa si hay una version nueva en GitHub Releases
 Profiles\
   Safe.json             <- solo lo que no afecta al funcionamiento normal
-  Balanced.json          <- el que uso yo por defecto
+  Balanced.json         <- el que uso yo por defecto
   Aggressive.json       <- todo lo anterior + Superfetch, mas tareas y bloqueo por IP
-Plugins\                <- opcional. Modulos propios que quieras anadir (ver abajo)
+Plugins\                <- opcional. Modulos propios que quieras anadir (ver mas abajo)
 Backup\                 <- se crea sola. Estado del sistema antes de cada cambio
 Logs\                   <- se crea sola. Logs de sesion e informes HTML
 ```
@@ -59,39 +61,27 @@ Te deja elegir módulo por módulo, incluyendo Audit, Apps y Browsers. Pensado p
 
 Aplica todo lo que el perfil tenga marcado como `enabled` sin pasar por el menú. Antes de aplicar nada crea un punto de restauración del sistema y guarda en `Backup\` una foto del estado previo (servicios, claves de registro, hosts original).
 
-### Solo algunos módulos del perfil
+### Parámetros del lanzador
 
-```powershell
-.\GhostCleaner.ps1 -Profile Balanced -Modules Privacy,Security
-```
+| Parámetro | Qué hace |
+|---|---|
+| `-Profile <nombre>` | Aplica el perfil indicado (`Safe`, `Balanced`, `Aggressive` o uno personalizado) sin pasar por el menú. |
+| `-Modules <lista>` | Limita la ejecución a esos módulos del perfil, p.ej. `-Modules Privacy,Security`. |
+| `-DryRun` | Simula la ejecución: muestra qué haría sin cambiar nada real. |
+| `-Silent` | Modo desatendido: sin pausas de teclado ni prompts (pensado para GPO/SCCM). |
+| `-Audit` | Solo lee el estado actual del sistema. Ignora `-Profile` si se indican los dos. |
+| `-SkipRestorePoint` | Omite la creación del punto de restauración del sistema antes de aplicar el perfil. |
 
-Útil si ya tienes aplicado el resto y solo quieres tocar un par de cosas.
-
-### Simulación, sin tocar nada real
+Ejemplos:
 
 ```powershell
 .\GhostCleaner.ps1 -Profile Aggressive -DryRun
-```
-
-Recorre el perfil y dice qué haría en cada paso, pero no llega a ejecutar ningún cambio. Lo uso para revisar un perfil personalizado antes de soltarlo en una máquina de verdad.
-
-### Modo desatendido (GPO / SCCM / aprovisionamiento)
-
-```powershell
+.\GhostCleaner.ps1 -Profile Balanced -Modules Privacy,Security
 .\GhostCleaner.ps1 -Profile Safe -Silent
-```
-
-Sin pausas de teclado ni prompts. El log a fichero sigue siendo completo, solo se silencia la consola.
-
-### Solo diagnóstico
-
-```powershell
 .\GhostCleaner.ps1 -Audit
 ```
 
-Lee el estado actual de telemetría, servicios, hosts, Firewall y Defender, y lo muestra en una tabla. No cambia nada. Sirve para comprobar si un equipo ya tiene aplicado algo o para verificar en remoto que sigue cumpliendo lo esperado.
-
-## Módulos nuevos: Apps, bloqueo por Firewall, Compat y Update
+## Módulos: Apps, bloqueo por Firewall, Compat, Update y Browsers
 
 - **Apps** (`apps` en el JSON): desinstala apps preinstaladas vía `Get-AppxPackage`/`Remove-AppxPackage`, tanto para el usuario actual como del aprovisionamiento (para que no se reinstalen en cuentas nuevas). La lista por defecto solo quita Xbox y Cortana; OneDrive no se toca a menos que lo añadas tú mismo a la lista, porque mucha gente lo usa de verdad.
 - **Bloqueo de telemetría por Firewall** (`firewallBlock` en el JSON, dentro de `Security.psm1`): además del archivo hosts, crea una regla de salida contra las IPs resueltas de los dominios de telemetría. Más robusto si Microsoft cambia un dominio o si algo se conecta directo a una IP sin pasar por DNS. Las reglas llevan el prefijo `GhostCleaner-` y se limpian solas con la opción `[6] Restore`.
@@ -101,7 +91,7 @@ Lee el estado actual de telemetría, servicios, hosts, Firewall y Defender, y lo
 
 ## Perfiles personalizados
 
-Puedes copiar cualquier `.json` de `Profiles\`, renombrarlo y ajustarlo a tu gusto. Antes de ejecutarlo, `Test-GCProfile`/`Invoke-Profile` valida que las secciones conocidas (incluyendo `apps`, `firewallBlock` y `plugins`) tengan un `enabled` booleano y avisa si algo no encaja, en vez de fallar a mitad de la ejecución sin explicación.
+Puedes copiar cualquier `.json` de `Profiles\`, renombrarlo y ajustarlo a tu gusto. Antes de ejecutarlo, `Test-GCProfile`/`Invoke-Profile` valida que las secciones conocidas (incluyendo `apps`, `browsers`, `firewallBlock` y `plugins`) tengan un `enabled` booleano y avisa si algo no encaja, en vez de fallar a mitad de la ejecución sin explicación.
 
 ## Plugins: añadir tu propio módulo sin tocar el núcleo
 
