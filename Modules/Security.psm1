@@ -137,6 +137,82 @@ function Enable-Defender {
 
 
 # ==============================================================================
+# Block-GCTelemetryFirewall
+# ==============================================================================
+# Bloquea por Firewall (regla de salida) las IPs de los dominios de telemetria,
+# como complemento al bloqueo por archivo hosts (Hosts.psm1).
+#
+# POR QUE ESTO ADEMAS DEL HOSTS:
+#   El archivo hosts bloquea por NOMBRE de dominio: si Microsoft cambia el
+#   dominio o la app se conecta directamente a una IP sin pasar por DNS, el
+#   hosts no hace nada. Una regla de Firewall contra la IP es mas robusta
+#   porque no depende de resolucion de nombres.
+#
+# COMO RESOLVEMOS DOMINIO -> IP:
+#   [System.Net.Dns]::GetHostAddresses() hace la resolucion DNS usando .NET
+#   directamente, sin depender de Resolve-DnsName (que no existe en todas
+#   las versiones de PowerShell/Windows). Si un dominio no resuelve (puede
+#   pasar si ya esta bloqueado en el hosts de este mismo equipo), se omite
+#   sin parar el resto.
+#
+# NOMBRE DE LA REGLA:
+#   Todas las reglas que crea este modulo empiezan por "GhostCleaner-".
+#   Eso permite identificarlas y limpiarlas todas juntas desde Restore.psm1
+#   con Get-NetFirewallRule -DisplayName 'GhostCleaner-*'.
+# ==============================================================================
+
+function Block-GCTelemetryFirewall {
+    param(
+        [Parameter(Mandatory = $true)] [string[]]$Domains
+    )
+
+    $cmdlet = Get-Command 'New-NetFirewallRule' -ErrorAction SilentlyContinue
+    if (-not $cmdlet) {
+        Write-GC -Message 'New-NetFirewallRule no disponible en este sistema; se omite el bloqueo por Firewall.' -Level 'Warning'
+        return
+    }
+
+    $todasLasIps = New-Object System.Collections.Generic.List[string]
+
+    foreach ($dominio in $Domains) {
+        try {
+            $direcciones = [System.Net.Dns]::GetHostAddresses($dominio)
+            foreach ($ip in $direcciones) {
+                $todasLasIps.Add($ip.IPAddressToString)
+            }
+            Write-GC -Message ('Resuelto ' + $dominio + ' -> ' + ($direcciones -join ', ')) -Level 'Info'
+        } catch {
+            Write-GC -Message ('No se pudo resolver ' + $dominio + ' (puede que ya este bloqueado por hosts): ' + $_.Exception.Message) -Level 'Warning'
+        }
+    }
+
+    if ($todasLasIps.Count -eq 0) {
+        Write-GC -Message 'No se resolvio ninguna IP; no se crea ninguna regla de Firewall.' -Level 'Warning'
+        return
+    }
+
+    # Quitamos duplicados: varios dominios pueden compartir la misma IP (CDN).
+    $ipsUnicas = $todasLasIps | Select-Object -Unique
+
+    try {
+        # Si ya existe una regla nuestra de una ejecucion anterior, la quitamos
+        # primero para no acumular reglas duplicadas en cada ejecucion.
+        Get-NetFirewallRule -DisplayName 'GhostCleaner-TelemetryBlock' -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+
+        New-NetFirewallRule -DisplayName 'GhostCleaner-TelemetryBlock' `
+            -Direction Outbound -Action Block -RemoteAddress $ipsUnicas `
+            -Profile Any -ErrorAction Stop | Out-Null
+
+        Write-GC -Message ('Regla de Firewall creada: bloqueo de salida hacia ' + $ipsUnicas.Count + ' IPs de telemetria.') -Level 'Action'
+    } catch {
+        Write-GC -Message ('Fallo al crear la regla de Firewall: ' + $_.Exception.Message) -Level 'Error'
+        throw
+    }
+}
+
+
+# ==============================================================================
 # Invoke-Security
 # ==============================================================================
 # Punto de entrada que llama el menu. Lee del perfil activo que pasos aplicar:
@@ -161,6 +237,21 @@ function Invoke-Security {
         Invoke-WithProgress -OperationName 'Defender' -ScriptBlock { Enable-Defender }
     } else {
         Write-GC -Message 'Defender: omitido segun perfil.' -Level 'Info'
+    }
+
+    # Bloqueo de telemetria por Firewall: independiente de Firewall/Defender,
+    # tiene su propia llave en el perfil porque conceptualmente pertenece al
+    # bloqueo de telemetria (mismo proposito que Hosts.psm1), no a "seguridad
+    # basica". La leemos aqui porque tecnicamente usa cmdlets de NetSecurity,
+    # el mismo terreno que el resto de este modulo.
+    $doFirewallBlock = Get-ProfileValue -Section 'firewallBlock' -Key 'enabled' -Default $false
+    if ($doFirewallBlock) {
+        $dominios = Get-ProfileValue -Section 'firewallBlock' -Key 'domains' -Default @()
+        if ($dominios.Count -gt 0) {
+            Invoke-WithProgress -OperationName 'Bloqueo de telemetria por Firewall' -ScriptBlock { Block-GCTelemetryFirewall -Domains $dominios }
+        } else {
+            Write-GC -Message 'firewallBlock.enabled=true pero no hay dominios en la lista; se omite.' -Level 'Warning'
+        }
     }
 
     Write-GC -Message 'Security aplicado.' -Level 'Info'
