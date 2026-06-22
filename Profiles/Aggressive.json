@@ -55,5 +55,36 @@
     "enabled": true,
     "enableFirewall": true,
     "enableDefender": true
+  },
+
+  "apps": {
+    "enabled": true,
+    "list": [
+      "Microsoft.XboxApp",
+      "Microsoft.XboxGamingOverlay",
+      "Microsoft.Xbox.TCUI",
+      "Microsoft.GamingApp",
+      "Microsoft.549981C3F5F10"
+    ]
+  },
+
+  "firewallBlock": {
+    "enabled": true,
+    "domains": [
+      "telemetry.microsoft.com",
+      "watson.telemetry.microsoft.com",
+      "vortex.data.microsoft.com",
+      "settings-win.data.microsoft.com",
+      "telecommand.telemetry.microsoft.com",
+      "oca.telemetry.microsoft.com",
+      "sqm.telemetry.microsoft.com",
+      "watson.microsoft.com"
+    ]
+  },
+
+  "browsers": {
+    "enabled": true,
+    "edge": true,
+    "chrome": true
   }
 }
