@@ -356,7 +356,7 @@ function Test-GCProfile {
     )
 
     $problemas = @()
-    $seccionesConocidas = @('privacy', 'services', 'tasks', 'hosts', 'optimizer', 'security')
+    $seccionesConocidas = @('privacy', 'services', 'tasks', 'hosts', 'optimizer', 'security', 'apps', 'browsers', 'firewallBlock', 'plugins')
 
     try {
         Load-GCProfile -ProfileName $ProfileName
@@ -620,6 +620,78 @@ function Export-GCReport {
 
 
 # ==============================================================================
+# Import-GCPlugins
+# ==============================================================================
+# Sistema de plugins minimo: cualquier .psm1 que alguien deje en la carpeta
+# Plugins\ se carga igual que un modulo del nucleo, sin tocar nada de este
+# proyecto. Pensado para quien quiera anadir un modulo propio (por ejemplo,
+# limpiar una app concreta de su empresa) sin tener que tocar GhostCleaner.ps1
+# ni mandar un pull request para algo muy especifico de su caso.
+#
+# CONVENCION QUE DEBE SEGUIR UN PLUGIN:
+#   - Vivir en <raiz>\Plugins\NombrePlugin.psm1
+#   - Exponer una funcion Invoke-NombrePlugin (incluso vacia si solo quiere
+#     registrar helpers) para que el menu/los perfiles puedan llamarlo igual
+#     que a los modulos del nucleo.
+#   - Puede usar Write-GC, Get-ProfileValue y el resto de helpers de Core.psm1
+#     con total normalidad, porque se carga con -Global igual que ellos.
+#
+# COMO SE EJECUTAN DESDE UN PERFIL:
+#   Anade una clave "plugins": { "enabled": true, "list": ["NombrePlugin"] }
+#   al JSON y se ejecutaran junto al resto de modulos.
+# ==============================================================================
+
+function Import-GCPlugins {
+    $pluginsPath = Join-Path $global:GC_Root 'Plugins'
+
+    if (-not (Test-Path $pluginsPath)) {
+        return @()
+    }
+
+    $cargados = @()
+    $archivos = Get-ChildItem -Path $pluginsPath -Filter '*.psm1' -ErrorAction SilentlyContinue
+
+    foreach ($archivo in $archivos) {
+        try {
+            Import-Module $archivo.FullName -Force -Global -ErrorAction Stop
+            $nombre = $archivo.BaseName
+            $cargados += $nombre
+            Write-GC -Message ('Plugin cargado: ' + $nombre) -Level 'Info'
+        } catch {
+            Write-GC -Message ('No se pudo cargar el plugin ' + $archivo.Name + ': ' + $_.Exception.Message) -Level 'Warning'
+        }
+    }
+
+    return $cargados
+}
+
+
+# ==============================================================================
+# Invoke-GCPlugins
+# ==============================================================================
+# Ejecuta los plugins indicados en el perfil (seccion "plugins"), llamando a
+# Invoke-<NombrePlugin> de cada uno. Si el perfil no define la seccion, no se
+# ejecuta ningun plugin (comportamiento explicito, no "todos por defecto").
+# ==============================================================================
+
+function Invoke-GCPlugins {
+    $habilitado = Get-ProfileValue -Section 'plugins' -Key 'enabled' -Default $false
+    if (-not $habilitado) { return }
+
+    $lista = Get-ProfileValue -Section 'plugins' -Key 'list' -Default @()
+
+    foreach ($nombrePlugin in $lista) {
+        $funcion = 'Invoke-' + $nombrePlugin
+        if (Get-Command $funcion -ErrorAction SilentlyContinue) {
+            [void](Invoke-WithProgress -OperationName ('Plugin: ' + $nombrePlugin) -ScriptBlock ([scriptblock]::Create($funcion)))
+        } else {
+            Write-GC -Message ('Plugin "' + $nombrePlugin + '" listado en el perfil pero no encontrado (¿esta en Plugins\?).') -Level 'Warning'
+        }
+    }
+}
+
+
+# ==============================================================================
 # Invoke-Profile
 # ==============================================================================
 # Ejecuta todas las acciones definidas en un perfil JSON de forma automatica,
@@ -690,6 +762,8 @@ function Invoke-Profile {
         'hosts'     = 'Hosts'
         'optimizer' = 'Optimizer'
         'security'  = 'Security'
+        'apps'      = 'Apps'
+        'browsers'  = 'Browsers'
     }
 
     foreach ($seccion in $mapaModulos.Keys) {
@@ -704,6 +778,11 @@ function Invoke-Profile {
             $funcion = 'Invoke-' + $nombreModulo
             [void](Invoke-WithProgress -OperationName $nombreModulo -ScriptBlock ([scriptblock]::Create($funcion)))
         }
+    }
+
+    # Plugins: se ejecutan al final, despues de los modulos del nucleo.
+    if (-not $Modules -or $Modules.Count -eq 0 -or ($Modules -contains 'Plugins')) {
+        Invoke-GCPlugins
     }
 
     Write-Host ''
@@ -734,10 +813,10 @@ function Show-MainMenu {
     while ($true) {
         Clear-Host
 
-        Write-Host '╔════════════════════════════════════════════╗' -ForegroundColor DarkCyan
-        Write-Host '║                GhostCleaner                ║' -ForegroundColor Cyan
-        Write-Host '║   Telemetria · Publicidad · Rendimiento    ║' -ForegroundColor Gray
-        Write-Host '╚════════════════════════════════════════════╝' -ForegroundColor DarkCyan
+        Write-Host '╔══════════════════════════════════════╗' -ForegroundColor DarkCyan
+        Write-Host '║             GhostCleaner              ║' -ForegroundColor Cyan
+        Write-Host '║   Telemetria · Publicidad · Rendimiento ║' -ForegroundColor Gray
+        Write-Host '╚══════════════════════════════════════╝' -ForegroundColor DarkCyan
         Write-Host ''
         Write-Host ' github.com/byjone/GhostCleaner' -ForegroundColor DarkYellow
         Write-Host ' Issues, releases y contribuciones en el repo.' -ForegroundColor DarkGray
@@ -806,8 +885,10 @@ function Show-MainMenu {
         Write-Host '       (vuelven a inicio Manual, no Automatico)' -ForegroundColor DarkGray
         Write-Host '     * Limpia las entradas anadidas al archivo hosts' -ForegroundColor DarkGray
         Write-Host '       (elimina los bloqueos de dominios de telemetria)' -ForegroundColor DarkGray
-        Write-Host '     NOTA: no revierte cambios de Registro ni tareas.' -ForegroundColor Yellow
-        Write-Host '     Afecta: servicios y archivo hosts (restauracion parcial)' -ForegroundColor DarkGray
+        Write-Host '     * Quita las reglas de Firewall y las politicas de Edge/Chrome' -ForegroundColor DarkGray
+        Write-Host '       que haya aplicado GhostCleaner' -ForegroundColor DarkGray
+        Write-Host '     NOTA: no revierte cambios de Registro de telemetria ni tareas.' -ForegroundColor Yellow
+        Write-Host '     Afecta: servicios, hosts, Firewall y politicas de navegador' -ForegroundColor DarkGray
 
         Write-Host ''
         Write-Host ' [7] AUDIT  -  Ver el estado actual sin cambiar nada' -ForegroundColor White
@@ -820,11 +901,24 @@ function Show-MainMenu {
         Write-Host '     Afecta: nada. Solo genera un archivo.' -ForegroundColor DarkGray
 
         Write-Host ''
+        Write-Host ' [9] APPS  -  Quitar apps preinstaladas (Xbox, Cortana...)' -ForegroundColor White
+        Write-Host '     * Desinstala apps Appx/UWP de la lista por defecto o del perfil' -ForegroundColor DarkGray
+        Write-Host '     Afecta: apps instaladas para el usuario actual (y aprovisionamiento)' -ForegroundColor DarkGray
+
+        Write-Host ''
+        Write-Host ' [10] BROWSERS  -  Privacidad de Edge y Chrome (opcional)' -ForegroundColor White
+        Write-Host '     * Desactiva informes de uso/caidas y "Do Not Track" en Edge' -ForegroundColor DarkGray
+        Write-Host '     * Desactiva metricas y reporte extendido de Safe Browsing en Chrome' -ForegroundColor DarkGray
+        Write-Host '     * Solo se aplica al navegador que tengas instalado' -ForegroundColor DarkGray
+        Write-Host '     NOTA: usa [6] Restore para revertir estas politicas.' -ForegroundColor DarkGray
+        Write-Host '     Afecta: Registro (HKLM, politicas de Edge/Chrome)' -ForegroundColor DarkGray
+
+        Write-Host ''
         Write-Host '----------------------------------------' -ForegroundColor DarkCyan
         Write-Host ' [0] EXIT  -  Cerrar GhostCleaner' -ForegroundColor Yellow
         Write-Host ''
 
-        $c = Read-Host 'Selecciona una opcion (0-8)'
+        $c = Read-Host 'Selecciona una opcion (0-10)'
 
         switch ($c) {
             '1' {
@@ -867,6 +961,16 @@ function Show-MainMenu {
                 [void](Export-GCReport -Format 'HTML')
                 Pause-ForContinue
             }
+            '9' {
+                Write-GC -Message 'Ejecutando opcion [9]: Apps.' -Level 'Action'
+                [void](Invoke-WithProgress -OperationName 'Quitando apps preinstaladas' -ScriptBlock { Invoke-Apps })
+                Pause-ForContinue
+            }
+            '10' {
+                Write-GC -Message 'Ejecutando opcion [10]: Browsers.' -Level 'Action'
+                [void](Invoke-WithProgress -OperationName 'Privacidad de Edge/Chrome' -ScriptBlock { Invoke-Browsers })
+                Pause-ForContinue
+            }
             '0' {
                 Write-Host ''
                 Write-Host ' Hasta luego.' -ForegroundColor Cyan
@@ -874,7 +978,7 @@ function Show-MainMenu {
                 return
             }
             default {
-                Write-GC -Message 'Opcion no valida. Escribe un numero del 0 al 8.' -Level 'Warning'
+                Write-GC -Message 'Opcion no valida. Escribe un numero del 0 al 10.' -Level 'Warning'
                 Pause-ForContinue
             }
         }
