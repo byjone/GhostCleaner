@@ -4,8 +4,6 @@ PowerShell script to reduce Windows telemetry and advertising, and make the syst
 
 It started from doing the same things on every new PC I set up: disabling DiagTrack, removing the Advertising ID, disabling a handful of "Customer Experience Improvement Program" scheduled tasks... Eventually, I bundled everything into a script with profiles so I wouldn't have to remember the full checklist every time.
 
-Current version: **1.3.1**. See [CHANGELOG.md](CHANGELOG.md) for the complete history.
-
 ## What It Does (and Doesn't Do)
 
 GhostCleaner modifies the registry, services, scheduled tasks, the hosts file, outbound firewall rules, preinstalled apps (Appx), and a few security settings. It is **not** a "miracle optimizer" and does not claim to double your performance: its purpose is to disable data collection processes and leave Firewall/Defender in a known state. The temporary file cleanup is standard housekeeping, nothing extraordinary.
